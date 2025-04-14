@@ -152,13 +152,23 @@ class Uplink:
         )
         idx = 0
         ln = len(channel.frames)
+        logger.info(f"Total frames available: {ln}")
+        if ln == 0:
+            raise ValueError(f"Channel {channel.number} has no frames to encode!")
+
         try:
             while True:
                 await channel.send_frame.wait()
                 channel.send_frame.clear()
                 timestamp = int(time.time_ns() / 1000)
+
                 frame = channel.frames[idx % ln].data.encode()
-                encoded = self.encoder.encode(channel.number, frame, timestamp)
+                # encoded = self.encoder.encode(channel.number, frame, timestamp)
+                try:
+                    encoded = self.encoder.encode(channel.number, frame, timestamp)
+                except Exception as e:
+                    logger.error(f"Encoding failed for channel {channel.number}: {e}")
+                    raise                
                 packaged_frame = json.dumps(
                     {
                         "channel": channel.number,
@@ -166,8 +176,15 @@ class Uplink:
                         "encoded": encoded.hex(),
                     }
                 )
-                self.encoded_queue.put_nowait(packaged_frame)
+                # self.encoded_queue.put_nowait(packaged_frame)
+                try:
+                    self.encoded_queue.put_nowait(packaged_frame)
+                except asyncio.QueueFull:
+                    logger.warning("Encoded queue is full! Dropping frame.")
+
                 idx += 1
+                logger.debug(f"Processing frame {idx} for channel {channel.number}")
+
         except Exception as e:
             logger.critical(f"Frame stream failed for {channel}")
             raise e

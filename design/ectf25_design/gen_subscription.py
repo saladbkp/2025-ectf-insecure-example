@@ -17,6 +17,8 @@ import struct
 
 from loguru import logger
 
+import hmac
+import hashlib
 
 def gen_subscription(
     secrets: bytes, device_id: int, start: int, end: int, channel: int
@@ -43,7 +45,26 @@ def gen_subscription(
     # Please note that the secrets are READ ONLY at this sage!
 
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return struct.pack("<IQQI", device_id, start, end, channel)
+    # return struct.pack("<IQQI", device_id, start, end, channel)
+
+    ################### APU
+    # 0xDEADBEEF in decimal
+    device_key = secrets.get("device_keys", {}).get(str(device_id))
+    if not device_key:
+        raise ValueError("Invalid device_id: Not found in secrets")
+
+    # Ensure no more than 8 active subscriptions
+    if len(secrets.get("active_subscriptions", {}).get(str(device_id), [])) >= 8:
+        raise ValueError("Device has reached the maximum of 8 active subscriptions")
+
+    # Pack the subscription data
+    subscription_data = struct.pack("<IQQI", device_id, start, end, channel)
+
+    # Compute HMAC to ensure data integrity
+    hmac_signature = hmac.new(device_key.encode(), subscription_data, hashlib.sha256).digest()
+
+    # Combine subscription data and HMAC signature
+    return subscription_data + hmac_signature
 
 
 def parse_args():

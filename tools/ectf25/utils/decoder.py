@@ -139,10 +139,13 @@ class DecoderIntf:
     def subscribe(self, subscription: bytes):
         """Subscribe the Decoder to a new subscription
 
-        :param subscription: Content of subscription file created by
-            ectf25_design.gen_subscription
+        :param subscription: Content of subscription file
         :raises DecoderError: Error on subscribe failure
         """
+        # Extract device ID from subscription (Assuming first 4 bytes store the device ID)
+        device_id = struct.unpack("<I", subscription[:4])[0]
+        logger.info(f"Subscribing device ID: {hex(device_id)}")  # Log device ID
+
         # send subscribe message
         msg = Message(Opcode.SUBSCRIBE, subscription)
         self.send_msg(msg)
@@ -150,7 +153,12 @@ class DecoderIntf:
         # receive response
         resp = self.get_msg()
         if resp != Message(Opcode.SUBSCRIBE, b""):
+            logger.error(f"Bad subscribe response {resp}")
             raise DecoderError(f"Bad subscribe response {resp}")
+        
+        logger.info("Subscription successful!")
+
+
 
     def list(self) -> list[tuple[int, int, int]]:
         """List the subscribed channels of a Decoder
@@ -262,7 +270,7 @@ class DecoderIntf:
             logger.info(f"Got DEBUG: {repr(msg.body)}")
 
     def send_msg(self, msg: Message):
-        """Send a message to the Decoder
+        """Send a message to the Decoder`
 
         :param msg: Message to send
         :raises DecoderError: If unexpected behavior or ERROR message encountered

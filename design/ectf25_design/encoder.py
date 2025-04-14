@@ -14,6 +14,9 @@ import argparse
 import struct
 import json
 
+import hmac
+import hashlib
+from loguru import logger
 
 class Encoder:
     def __init__(self, secrets: bytes):
@@ -31,7 +34,15 @@ class Encoder:
 
         # Load the example secrets for use in Encoder.encode
         # This will be "EXAMPLE" in the reference design"
-        self.some_secrets = secrets["some_secrets"]
+        # self.some_secrets = secrets["some_secrets"]
+
+        ########################### APU
+        # Load the json of the secrets file
+
+        # Store device subscriptions and HMAC keys
+        self.device_keys = secrets.get("device_keys", {})
+        self.active_subscriptions = secrets.get("active_subscriptions", {})
+        self.device_id = "3740248746"  # Example device ID
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
         """The frame encoder function
@@ -54,7 +65,38 @@ class Encoder:
         # TODO: encode the satellite frames so that they meet functional and
         #  security requirements
 
-        return struct.pack("<IQ", channel, timestamp) + frame
+        # return struct.pack("<IQ", channel, timestamp) + frame
+
+        ####################### APU
+        
+        # Ensure frame size does not exceed 64 bytes
+        if len(frame) > 64:
+            raise ValueError("Frame size exceeds 64 bytes")
+
+        # Retrieve the device key using the correct device ID
+        device_key = self.device_keys.get(self.device_id)
+        if not device_key:
+            raise ValueError("No valid device key for this device")
+        logger.debug(f"device_key: {device_key}")
+
+        # Verify there is an active subscription for this channel
+        logger.debug(f"Encoding frame for channel: {channel}, timestamp: {timestamp}")
+        # active subscription from 32 to 128
+        active_subs = self.active_subscriptions.get(self.device_id, [])
+
+        logger.debug(f"Active subscriptions for device {self.device_id}: {active_subs}")
+
+        if not any(start <= timestamp <= end for _, start, end in active_subs):
+            raise ValueError(f"No active subscription for this timestamp: {timestamp}")
+
+        # Pack the frame data (Channel, Timestamp, Frame)
+        frame_data = struct.pack("<IQ", channel, timestamp) + frame
+
+        # Compute HMAC to authenticate the frame
+        frame_hmac = hmac.new(device_key.encode(), frame_data, hashlib.sha256).digest()
+        logger.debug(f"HMAC compute: {frame_hmac}")
+        # Return the final encoded frame with HMAC appended
+        return frame_data + frame_hmac
 
 
 def main():

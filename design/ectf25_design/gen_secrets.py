@@ -15,7 +15,19 @@ import json
 from pathlib import Path
 
 from loguru import logger
+import random
+import time
 
+def generate_device_key() -> str:
+    """Generate a random 32-character hexadecimal key."""
+    return "".join(random.choices("0123456789ABCDEF", k=32))
+
+
+def generate_subscription_timestamp() -> tuple[int, int]:
+    """Generate a valid active subscription timestamp range (start, end)."""
+    current_time = int(time.time_ns() / 1000)  # Get current timestamp in microseconds
+    subscription_duration = 24 * 60 * 60 * 1_000_000  # 24 hours in microseconds
+    return current_time, current_time + subscription_duration
 
 def gen_secrets(channels: list[int]) -> bytes:
     """Generate the contents secrets file
@@ -35,9 +47,20 @@ def gen_secrets(channels: list[int]) -> bytes:
     # Create the secrets object
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
+    # Generate a device key for encryption/authentication
+    device_id = 0xDEADBEEF
+    
+    device_key = generate_device_key()
+
+    # Generate a valid subscription window
+    active_start, active_end = generate_subscription_timestamp()
+
+    # Create the secrets object
     secrets = {
         "channels": channels,
         "some_secrets": "EXAMPLE",
+        "device_keys": {device_id: device_key},
+        "active_subscriptions": {device_id: [[1, active_start, active_end]]},
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
